@@ -23,9 +23,9 @@ Usage - formats:
                                          yolov5s.tflite             # TensorFlow Lite
                                          yolov5s_edgetpu.tflite     # TensorFlow Edge TPU
 """
-
-import argparse
 import os
+os.environ['KMP_DUPLICATE_LIB_OK']='True'
+import argparse
 import sys
 from pathlib import Path
 
@@ -34,6 +34,7 @@ import torch.backends.cudnn as cudnn
 
 FILE = Path(__file__).resolve()
 ROOT = FILE.parents[0]  # YOLOv5 root directory
+MAIN_DIR = FILE.parents[1]
 if str(ROOT) not in sys.path:
     sys.path.append(str(ROOT))  # add ROOT to PATH
 ROOT = Path(os.path.relpath(ROOT, Path.cwd()))  # relative
@@ -197,7 +198,12 @@ def run(
 
         # Print time (inference-only)
         LOGGER.info(f'{s}Done. ({t3 - t2:.3f}s)')
-
+    del model
+    del stride
+    del names
+    del pt
+    
+    torch.cuda.empty_cache()
     # Print results
     t = tuple(x / seen * 1E3 for x in dt)  # speeds per image
     LOGGER.info(f'Speed: %.1fms pre-process, %.1fms inference, %.1fms NMS per image at shape {(1, 3, *imgsz)}' % t)
@@ -206,31 +212,40 @@ def run(
         LOGGER.info(f"Results saved to {colorstr('bold', save_dir)}{s}")
     if update:
         strip_optimizer(weights)  # update model (to fix SourceChangeWarning)
+    del imgsz
 
-
-def parse_opt():
+def parse_opt(setting=None):
+    # setting ={
+    #     "weight_path": ROOT / "runs" / "train" / "cd" / "weights" / "best.pt",
+    #     "data":        ROOT / 'data/dataset.yaml',
+    #     "source":      MAIN_DIR / "input_image",
+    #     "result_path": MAIN_DIR / "result",
+    #     "name": "exp"
+    # }
     
+    # ROOT / 'runs/detect'
     parser = argparse.ArgumentParser()
-    parser.add_argument('--weights', nargs='+', type=str, default=ROOT / 'yolov5x.pt', help='model path(s)')
-    parser.add_argument('--source', type=str, default=ROOT / 'data/images', help='file/dir/URL/glob, 0 for webcam')
-    parser.add_argument('--data', type=str, default=ROOT / 'data/coco128.yaml', help='(optional) dataset.yaml path')
+
+    parser.add_argument('--weights', nargs='+', type=str, default=setting["weight_path"], help='model path(s)')
+    parser.add_argument('--source', type=str, default=setting["source"], help='file/dir/URL/glob, 0 for webcam')
+    parser.add_argument('--data', type=str, default=setting["data"], help='(optional) dataset.yaml path')
     parser.add_argument('--imgsz', '--img', '--img-size', nargs='+', type=int, default=[640], help='inference size h,w')
     parser.add_argument('--conf-thres', type=float, default=0.25, help='confidence threshold')
     parser.add_argument('--iou-thres', type=float, default=0.45, help='NMS IoU threshold')
     parser.add_argument('--max-det', type=int, default=1000, help='maximum detections per image')
     parser.add_argument('--device', default='', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
-    parser.add_argument('--view-img', action='store_true', help='show results')
-    parser.add_argument('--save-txt', action='store_true', help='save results to *.txt')
+    parser.add_argument('--view-img', action='store_true', help='show results')          # 결과 값  T/F
+    parser.add_argument('--save-txt', action='store_true', default=True, help='save results to *.txt') # 라벨 값  T/F
     parser.add_argument('--save-conf', action='store_true', help='save confidences in --save-txt labels')
-    parser.add_argument('--save-crop', action='store_true', help='save cropped prediction boxes')
+    parser.add_argument('--save-crop', action='store_true', help='save cropped prediction boxes')      # Crop 결과 T/F
     parser.add_argument('--nosave', action='store_true', help='do not save images/videos')
     parser.add_argument('--classes', nargs='+', type=int, help='filter by class: --classes 0, or --classes 0 2 3')
     parser.add_argument('--agnostic-nms', action='store_true', help='class-agnostic NMS')
     parser.add_argument('--augment', action='store_true', help='augmented inference')
     parser.add_argument('--visualize', action='store_true', help='visualize features')
     parser.add_argument('--update', action='store_true', help='update all models')
-    parser.add_argument('--project', default=ROOT / 'runs/detect', help='save results to project/name')
-    parser.add_argument('--name', default='exp', help='save results to project/name')
+    parser.add_argument('--project', default=setting["result_path"], help='save results to project/name')             # 저장 결로
+    parser.add_argument('--name', default=setting["name"], help='save results to project/name')                   # 이름
     parser.add_argument('--exist-ok', action='store_true', help='existing project/name ok, do not increment')
     parser.add_argument('--line-thickness', default=3, type=int, help='bounding box thickness (pixels)')
     parser.add_argument('--hide-labels', default=False, action='store_true', help='hide labels')
@@ -246,8 +261,21 @@ def parse_opt():
 def main(opt):
     check_requirements(exclude=('tensorboard', 'thop'))
     run(**vars(opt))
+    
+    
+def lp_detect(setting):
+    opt = parse_opt(setting)
+    main(opt)
 
 
 if __name__ == "__main__":
-    opt = parse_opt()
+    setting = {
+        "root": ROOT,
+        "weight_path": ROOT / "runs/train/cd/weights/best.pt",
+        "data":        ROOT / 'data/dataset.yaml',
+        "result_path": ROOT / "result_img",
+        "source":      ROOT / "DB_image"
+    }
+    setting["name"] ="20220622"
+    opt = parse_opt(setting)
     main(opt)
